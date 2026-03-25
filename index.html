@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0c0c0f">
+<title>Receipt Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0f;
+    --surface: #16161a;
+    --surface-hover: #1e1e24;
+    --border: #2a2a32;
+    --border-light: #3a3a44;
+    --text: #e8e8ed;
+    --text-muted: #8888a0;
+    --text-dim: #55556a;
+    --green: #4ade80;
+    --green-dim: #166534;
+    --red: #f87171;
+    --red-dim: #7f1d1d;
+    --accent: #818cf8;
+    --accent-dim: #312e81;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+    --font-sans: 'DM Sans', -apple-system, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input, button, select, textarea { font-family: inherit; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); }
+
+  /* Animations */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  .fade-in { animation: fadeIn 0.2s ease-out; }
+  .slide-up { animation: slideUp 0.25s ease-out; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Screen container */
+  .screen { display: none; padding-bottom: 80px; min-height: 100vh; min-height: 100dvh; }
+  .screen.active { display: block; }
+
+  /* Nav */
+  .nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-around;
+    padding: 6px 0 max(8px, env(safe-area-inset-bottom));
+    max-width: 430px; margin: 0 auto;
+  }
+  .nav-btn {
+    background: none; border: none; padding: 6px 12px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: var(--text-muted); transition: color 0.15s;
+  }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn .icon { font-size: 20px; }
+  .nav-btn .label { font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* Header */
+  .header { padding: 20px 20px 12px; border-bottom: 1px solid var(--border); }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .header .sub { font-size: 13px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 4px; }
+
+  /* Shared input styles */
+  .input {
+    width: 100%; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font-family: var(--font-mono); font-size: 14px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .input:focus { border-color: var(--accent); }
+  .input::placeholder { color: var(--text-dim); }
+  .field-label {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; display: block;
+  }
+
+  /* Category pill */
+  .cat-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 20px; font-size: 11px;
+    font-family: var(--font-mono);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    padding: 14px 40px; font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-primary:active { opacity: 0.85; }
+  .btn-confirm {
+    background: var(--green); color: #000; border: none; border-radius: 10px;
+    padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; flex: 2;
+  }
+  .btn-secondary {
+    background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; flex: 1;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--green-dim); color: var(--green); border: 1px solid var(--green);
+    padding: 10px 20px; border-radius: 10px; font-family: var(--font-mono);
+    font-size: 13px; z-index: 200; animation: slideDown 0.2s ease-out;
+    pointer-events: none;
+  }
+  .toast.error { background: var(--red-dim); color: var(--red); border-color: var(--red); }
+
+  /* Category chips */
+  .cat-chip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    padding: 6px 12px; cursor: pointer; font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-muted); transition: all 0.15s;
+  }
+  .cat-chip.selected { border-color: currentColor; }
+
+  /* Transaction row */
+  .txn-row {
+    padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .txn-row:active { background: var(--surface); }
+  .txn-detail { background: var(--surface); padding: 0 20px 12px 60px; border-bottom: 1px solid var(--border); animation: slideDown 0.15s ease-out; }
+
+  /* Toggle */
+  .toggle-group {
+    display: flex; background: var(--surface); border-radius: 10px;
+    border: 1px solid var(--border); overflow: hidden;
+  }
+  .toggle-btn {
+    flex: 1; padding: 10px; border: none; cursor: pointer;
+    font-family: var(--font-sans); font-size: 14px; font-weight: 600;
+    text-transform: capitalize; background: transparent; color: var(--text-muted);
+    transition: all 0.15s;
+  }
+
+  /* Camera */
+  #camera-video {
+    width: 100%; max-height: 50vh; object-fit: cover; border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  #camera-canvas { display: none; }
+
+  /* Recurring rule card */
+  .rule-card {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; border-radius: 8px; border: 1px solid var(--green-dim);
+    background: rgba(22, 101, 52, 0.15);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── TOAST ─────────────────────────────────────────────────────────────── -->
+<div id="toast" class="toast" style="display:none"></div>
+
+<!-- ─── SCREEN: CAPTURE ───────────────────────────────────────────────────── -->
+<div id="screen-capture" class="screen active">
+  <div class="header">
+    <h1>Scan Receipt</h1>
+    <div class="sub">snap → read → log</div>
+  </div>
+
+  <!-- Phase: Ready -->
+  <div id="capture-ready" class="fade-in" style="padding:20px; display:flex; flex-direction:column; align-items:center; gap:24px; padding-top:40px;">
+    <div id="camera-container" style="width:100%; display:none; flex-direction:column; gap:12px; align-items:center;">
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas"></canvas>
+      <div style="display:flex; gap:10px; width:100%;">
+        <button onclick="capturePhoto()" class="btn-primary" style="flex:2; padding:14px;">📸 Capture</button>
+        <button onclick="stopCamera()" class="btn-secondary" style="flex:1;">Cancel</button>
+      </div>
+    </div>
+    <div id="camera-placeholder" style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+      <div style="width:200px; height:260px; border-radius:16px; border:2px dashed var(--border-light); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:var(--surface);">
+        <span style="font-size:48px; opacity:0.7;">📸</span>
+        <span style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted); text-align:center; padding:0 20px;">Snap a receipt to auto-log</span>
+      </div>
+      <button onclick="startCamera()" class="btn-primary">Open Camera</button>
+      <div style="text-align:center;">
+        <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">— or —</span>
+        <br>
+        <label style="display:inline-block; margin-top:8px; padding:8px 16px; border:1px solid var(--border); border-radius:8px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); cursor:pointer;">
+          📁 Upload Image
+          <input type="file" accept="image/*" onchange="handleFileUpload(event)" style="display:none;">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase: Processing -->
+  <div id="capture-processing" style="display:none; padding:20px; flex-direction:column; align-items:center; gap:20px; padding-top:100px;">
+    <div style="width:60px; height:60px; border-radius:50%; border:3px solid var(--border); border-top-color:var(--accent); animation:spin 1s linear infinite;"></div>
+    <span style="font-family:var(--font-mono); font-size:13px; color:var(--text-muted);">Claude is reading your receipt...</span>
+  </div>
+
+  <!-- Phase: Review (populated by JS) -->
+  <div id="capture-review" style="display:none; padding:20px;" class="slide-up"></div>
+</div>
+
+<!-- ─── SCREEN: ADD ───────────────────────────────────────────────────────── -->
+<div id="screen-add" class="screen">
+  <div class="header">
+    <h1>Quick Add</h1>
+    <div class="sub">manual entry</div>
+  </div>
+  <div style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+    <!-- Type toggle -->
+    <div class="toggle-group">
+      <button id="toggle-expense" class="toggle-btn" onclick="setAddType('expense')" style="background:var(--red-dim); color:var(--red);">− Expense</button>
+      <button id="toggle-income" class="toggle-btn" onclick="setAddType('income')">+ Income</button>
+    </div>
+
+    <div>
+      <label class="field-label">Amount</label>
+      <div style="position:relative;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-family:var(--font-mono); font-size:14px; color:var(--text-muted);">$</span>
+        <input id="add-amount" type="number" inputmode="decimal" step="0.01" class="input" placeholder="0.00" style="padding-left:28px; font-size:18px; font-weight:700;">
+      </div>
+    </div>
+
+    <div>
+      <label class="field-label" id="add-source-label">Store / Source</label>
+      <input id="add-source" type="text" class="input" placeholder="e.g. Walmart">
+    </div>
+
+    <div>
+      <label class="field-label">Category</label>
+      <div id="add-categories" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+    </div>
+
+    <div>
+      <label class="field-label">Date</label>
+      <input id="add-date" type="date" class="input">
+    </div>
+
+    <div>
+      <label class="field-label">Notes (optional)</label>
+      <input id="add-notes" type="text" class="input" placeholder="Any details...">
+    </div>
+
+    <button id="add-save-btn" onclick="saveManualEntry()" style="background:var(--accent); color:#fff; border:none; border-radius:10px; padding:14px; font-size:15px; font-weight:700; cursor:pointer; margin-top:4px;">
+      Log Expense
+    </button>
+  </div>
+</div>
+
+<!-- ─── SCREEN: LIST ──────────────────────────────────────────────────────── -->
+<div id="screen-list" class="screen">
+  <div class="header">
+    <h1>Transaction Log</h1>
+    <div class="sub" id="list-count">Loading...</div>
+  </div>
+  <div id="transaction-list"></div>
+  <div id="list-empty" style="display:none; padding:60px 20px; text-align:center;">
+    <span style="font-size:40px; display:block; margin-bottom:12px;">📋</span>
+    <span style="font-family:var(--font-mono); font-size:13px; color:var(--text-dim);">No transactions yet. Scan a receipt or add one manually.</span>
+  </div>
+</div>
+
+<!-- ─── SCREEN: DASHBOARD ─────────────────────────────────────────────────── -->
+<div id="screen-dashboard" class="screen">
+  <div class="header">
+    <h1>Dashboard</h1>
+    <div class="sub">income vs expenses</div>
+  </div>
+  <div style="display:flex; margin:16px 20px 0; background:var(--surface); border-radius:8px; border:1px solid var(--border); overflow:hidden;">
+    <button id="dash-monthly-btn" class="toggle-btn" onclick="setDashView('monthly')" style="font-size:12px; font-family:var(--font-mono); background:var(--accent-dim); color:var(--accent);">Monthly</button>
+    <button id="dash-yearly-btn" class="toggle-btn" onclick="setDashView('yearly')" style="font-size:12px; font-family:var(--font-mono);">Yearly</button>
+  </div>
+  <div id="dashboard-content" style="padding:16px 20px;"></div>
+</div>
+
+<!-- ─── SCREEN: SETTINGS ──────────────────────────────────────────────────── -->
+<div id="screen-settings" class="screen">
+  <div class="header">
+    <h1>Settings</h1>
+    <div class="sub">keys, rules, categories</div>
+  </div>
+  <div style="padding:16px 20px; display:flex; flex-direction:column; gap:16px;">
+    <!-- API Keys -->
+    <div>
+      <div class="field-label" style="margin-bottom:8px;">API Configuration</div>
+      <div style="background:var(--surface); border-radius:10px; border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <label class="field-label">Anthropic API Key</label>
+          <input id="cfg-anthropic-key" type="password" class="input" placeholder="sk-ant-..." style="font-size:12px; background:var(--bg);">
+        </div>
+        <div>
+          <label class="field-label">Supabase URL</label>
+          <input id="cfg-supabase-url" type="text" class="input" placeholder="https://xxx.supabase.co" style="font-size:12px; background:var(--bg);">
+        </div>
+        <div>
+          <label class="field-label">Supabase Anon Key</label>
+          <input id="cfg-supabase-key" type="password" class="input" placeholder="eyJ..." style="font-size:12px; background:var(--bg);">
+        </div>
+        <label style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" onchange="toggleShowKeys(this.checked)"> Show keys
+        </label>
+        <button onclick="saveSettings()" style="background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:600; cursor:pointer;">Save Settings</button>
+      </div>
+    </div>
+
+    <!-- Recurring Rules -->
+    <div>
+      <div class="field-label" style="margin-bottom:8px;">Recurring Income</div>
+      <div style="background:var(--surface); border-radius:10px; border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:10px;">
+        <div id="recurring-rules-list"></div>
+        <div id="add-rule-form" style="display:none; flex-direction:column; gap:8px; padding:12px; background:var(--bg); border-radius:8px; border:1px solid var(--border);">
+          <input id="rule-label" type="text" class="input" placeholder="Label (e.g. Weekly Paycheck)" style="font-size:12px;">
+          <input id="rule-amount" type="number" inputmode="decimal" step="0.01" class="input" placeholder="Amount" style="font-size:12px;">
+          <select id="rule-frequency" class="input" style="font-size:12px;">
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Biweekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <select id="rule-day" class="input" style="font-size:12px;">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option>
+          </select>
+          <select id="rule-category" class="input" style="font-size:12px;">
+            <option value="Paycheck">Paycheck</option>
+            <option value="Side Income">Side Income</option>
+            <option value="Other">Other</option>
+          </select>
+          <div style="display:flex; gap:8px;">
+            <button onclick="saveRule()" style="flex:1; background:var(--green); color:#000; border:none; border-radius:6px; padding:8px; font-size:12px; font-weight:700; cursor:pointer;">Save Rule</button>
+            <button onclick="hideRuleForm()" style="flex:1; background:none; border:1px solid var(--border); border-radius:6px; padding:8px; font-size:12px; color:var(--text-muted); cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+        <button onclick="showRuleForm()" id="add-rule-btn" style="background:none; border:1px dashed var(--border-light); border-radius:8px; padding:10px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); cursor:pointer;">
+          + Add Recurring Rule
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Management -->
+    <div>
+      <div class="field-label" style="margin-bottom:8px;">Data</div>
+      <div style="background:var(--surface); border-radius:10px; border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:10px;">
+        <button onclick="exportData()" style="background:none; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); cursor:pointer;">📤 Export All Transactions (CSV)</button>
+        <button onclick="checkRecurring(true)" style="background:none; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); cursor:pointer;">🔄 Run Recurring Income Check</button>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-top:4px; line-height:1.6;">
+          Receipt Tracker PWA v1.0<br>
+          Camera → Claude API → Supabase<br>
+          Your data stays in your own Supabase instance.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── NAV ────────────────────────────────────────────────────────────────── -->
+<div class="nav">
+  <button class="nav-btn active" data-screen="capture" onclick="navigate('capture')"><span class="icon">📸</span><span class="label">Scan</span></button>
+  <button class="nav-btn" data-screen="add" onclick="navigate('add')"><span class="icon">✏️</span><span class="label">Add</span></button>
+  <button class="nav-btn" data-screen="list" onclick="navigate('list')"><span class="icon">📋</span><span class="label">Log</span></button>
+  <button class="nav-btn" data-screen="dashboard" onclick="navigate('dashboard')"><span class="icon">📊</span><span class="label">Stats</span></button>
+  <button class="nav-btn" data-screen="settings" onclick="navigate('settings')"><span class="icon">⚙️</span><span class="label">Setup</span></button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONFIGURATION & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CATEGORIES = [
+  "Groceries","Dining/Takeout","Gas/Auto","Farm/Horse","Business Supplies",
+  "Home/Household","Health","Entertainment","Subscriptions","Clothing",
+  "Paycheck","Side Income","Other"
+];
+const EXPENSE_CATEGORIES = CATEGORIES.filter(c => !["Paycheck","Side Income"].includes(c));
+const INCOME_CATEGORIES = ["Paycheck","Side Income","Other"];
+
+const CAT_ICONS = {
+  "Groceries":"🛒","Dining/Takeout":"🍔","Gas/Auto":"⛽","Farm/Horse":"🐴",
+  "Business Supplies":"📦","Home/Household":"🏠","Health":"💊",
+  "Entertainment":"🎬","Subscriptions":"🔄","Clothing":"👕",
+  "Paycheck":"💰","Side Income":"💵","Other":"📝"
+};
+const CAT_COLORS = {
+  "Groceries":"#4ade80","Dining/Takeout":"#fb923c","Gas/Auto":"#60a5fa",
+  "Farm/Horse":"#a78bfa","Business Supplies":"#f472b6","Home/Household":"#fbbf24",
+  "Health":"#f87171","Entertainment":"#34d399","Subscriptions":"#818cf8",
+  "Clothing":"#e879f9","Paycheck":"#22d3ee","Side Income":"#a3e635","Other":"#94a3b8"
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let currentScreen = 'capture';
+let addType = 'expense';
+let addCategory = '';
+let transactions = [];
+let recurringRules = [];
+let expandedTxn = null;
+let dashView = 'monthly';
+let cameraStream = null;
+let pendingReview = null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n);
+const fmtDate = d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+const fmtMonth = d => new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+const today = () => new Date().toISOString().split('T')[0];
+const uuid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2);
+
+function getConfig() {
+  return {
+    anthropicKey: localStorage.getItem('rt_anthropic_key') || '',
+    supabaseUrl: localStorage.getItem('rt_supabase_url') || '',
+    supabaseKey: localStorage.getItem('rt_supabase_key') || '',
+  };
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUPABASE CLIENT (minimal)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function sbFetch(path, method = 'GET', body = null) {
+  const cfg = getConfig();
+  if (!cfg.supabaseUrl || !cfg.supabaseKey) return null;
+  const url = cfg.supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + path;
+  const opts = {
+    method,
+    headers: {
+      'apikey': cfg.supabaseKey,
+      'Authorization': 'Bearer ' + cfg.supabaseKey,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'return=representation' : undefined,
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  // Clean undefined headers
+  Object.keys(opts.headers).forEach(k => opts.headers[k] === undefined && delete opts.headers[k]);
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) { console.error('Supabase error:', res.status, await res.text()); return null; }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) { console.error('Supabase fetch error:', e); return null; }
+}
+
+async function loadTransactions() {
+  const data = await sbFetch('transactions?order=date.desc,created_at.desc&limit=500');
+  if (data) {
+    transactions = data.map(t => ({
+      ...t,
+      line_items: typeof t.line_items === 'string' ? JSON.parse(t.line_items) : t.line_items,
+    }));
+  } else {
+    // Fallback to localStorage
+    transactions = JSON.parse(localStorage.getItem('rt_transactions') || '[]');
+  }
+  renderList();
+  renderDashboard();
+}
+
+async function saveTransaction(txn) {
+  // Always save to localStorage as backup
+  transactions.unshift(txn);
+  localStorage.setItem('rt_transactions', JSON.stringify(transactions));
+
+  // Try Supabase
+  const sbTxn = {
+    ...txn,
+    line_items: txn.line_items ? JSON.stringify(txn.line_items) : null,
+  };
+  const result = await sbFetch('transactions', 'POST', sbTxn);
+  if (result && result[0]) {
+    // Update local copy with server-assigned id if different
+    const idx = transactions.findIndex(t => t.id === txn.id);
+    if (idx >= 0) transactions[idx] = { ...txn, ...result[0], line_items: txn.line_items };
+  }
+  renderList();
+  renderDashboard();
+}
+
+async function deleteTransaction(id) {
+  transactions = transactions.filter(t => t.id !== id);
+  localStorage.setItem('rt_transactions', JSON.stringify(transactions));
+  await sbFetch('transactions?id=eq.' + id, 'DELETE');
+  expandedTxn = null;
+  renderList();
+  renderDashboard();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECURRING RULES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function loadRules() {
+  recurringRules = JSON.parse(localStorage.getItem('rt_recurring_rules') || '[]');
+  renderRules();
+}
+
+function saveRulesToStorage() {
+  localStorage.setItem('rt_recurring_rules', JSON.stringify(recurringRules));
+  renderRules();
+}
+
+function showRuleForm() {
+  document.getElementById('add-rule-form').style.display = 'flex';
+  document.getElementById('add-rule-btn').style.display = 'none';
+}
+
+function hideRuleForm() {
+  document.getElementById('add-rule-form').style.display = 'none';
+  document.getElementById('add-rule-btn').style.display = 'block';
+  document.getElementById('rule-label').value = '';
+  document.getElementById('rule-amount').value = '';
+}
+
+function saveRule() {
+  const label = document.getElementById('rule-label').value.trim();
+  const amount = parseFloat(document.getElementById('rule-amount').value);
+  const frequency = document.getElementById('rule-frequency').value;
+  const day = parseInt(document.getElementById('rule-day').value);
+  const category = document.getElementById('rule-category').value;
+  if (!label || !amount) { showToast('Fill in label and amount', true); return; }
+  recurringRules.push({ id: uuid(), label, amount, frequency, day, category, active: true, created_at: new Date().toISOString() });
+  saveRulesToStorage();
+  hideRuleForm();
+  showToast('Rule added: ' + label);
+}
+
+function deleteRule(id) {
+  recurringRules = recurringRules.filter(r => r.id !== id);
+  saveRulesToStorage();
+  showToast('Rule removed');
+}
+
+function toggleRule(id) {
+  const rule = recurringRules.find(r => r.id === id);
+  if (rule) { rule.active = !rule.active; saveRulesToStorage(); }
+}
+
+function renderRules() {
+  const el = document.getElementById('recurring-rules-list');
+  if (!recurringRules.length) { el.innerHTML = '<div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); padding:8px 0;">No recurring rules set up yet.</div>'; return; }
+  el.innerHTML = recurringRules.map(r => `
+    <div class="rule-card" style="margin-bottom:8px; opacity:${r.active ? 1 : 0.5};">
+      <div>
+        <div style="font-family:var(--font-sans); font-size:14px; font-weight:600; color:var(--text);">${r.label}</div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px;">
+          ${r.frequency} · ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][r.day]} · ${r.category}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:var(--font-mono); font-size:15px; font-weight:700; color:var(--green);">${fmt(r.amount)}</div>
+        <div style="display:flex; gap:6px; margin-top:4px; justify-content:flex-end;">
+          <button onclick="toggleRule('${r.id}')" style="background:none; border:none; font-size:11px; cursor:pointer; color:var(--text-muted);">${r.active ? '⏸ Pause' : '▶ Resume'}</button>
+          <button onclick="deleteRule('${r.id}')" style="background:none; border:none; font-size:11px; cursor:pointer; color:var(--red);">✕</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function checkRecurring(manual = false) {
+  const now = new Date();
+  let added = 0;
+
+  for (const rule of recurringRules) {
+    if (!rule.active) continue;
+
+    // Only look back from today, never forward
+    const lookback = rule.frequency === 'monthly' ? 35 : 14;
+    for (let i = 0; i < lookback; i++) {
+      const checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      // Don't create entries for future dates
+      if (checkDate > now) continue;
+
+      const year = checkDate.getFullYear();
+      const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+      const day = String(checkDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      let shouldFire = false;
+      if (rule.frequency === 'weekly' && checkDate.getDay() === rule.day) shouldFire = true;
+      if (rule.frequency === 'biweekly' && checkDate.getDay() === rule.day) {
+        const weekNum = Math.floor((checkDate - new Date(checkDate.getFullYear(),0,1)) / 604800000);
+        if (weekNum % 2 === 0) shouldFire = true;
+      }
+      if (rule.frequency === 'monthly' && checkDate.getDate() === (rule.day + 1)) shouldFire = true;
+
+      if (shouldFire) {
+        // Robust duplicate check: normalize dates and match on label + date + recurring flag
+        const exists = transactions.some(t => {
+          const tDate = (t.date || '').substring(0, 10);
+          return t.source_or_store === rule.label && tDate === dateStr && t.is_recurring;
+        });
+        if (!exists) {
+          const txn = {
+            id: uuid(), type: 'income', date: dateStr, amount: rule.amount,
+            source_or_store: rule.label, category: rule.category,
+            notes: 'Auto-logged recurring', line_items: null, thumbnail: null,
+            is_recurring: true, created_at: new Date().toISOString(),
+          };
+          await saveTransaction(txn);
+          added++;
+        }
+      }
+    }
+  }
+  localStorage.setItem('rt_last_recurring_check', now.toISOString());
+  if (manual) showToast(added > 0 ? `Added ${added} recurring entry(s)` : 'All recurring entries up to date');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function navigate(screen) {
+  currentScreen = screen;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === screen));
+
+  if (screen === 'list') renderList();
+  if (screen === 'dashboard') renderDashboard();
+  if (screen === 'add') initAddScreen();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CAMERA & RECEIPT SCANNING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    const video = document.getElementById('camera-video');
+    video.srcObject = cameraStream;
+    document.getElementById('camera-container').style.display = 'flex';
+    document.getElementById('camera-placeholder').style.display = 'none';
+  } catch(e) {
+    showToast('Camera access denied. Use upload instead.', true);
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  document.getElementById('camera-container').style.display = 'none';
+  document.getElementById('camera-placeholder').style.display = 'flex';
+}
+
+function capturePhoto() {
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  stopCamera();
+
+  // Get base64, compress as JPEG
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+  processReceiptImage(dataUrl);
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => processReceiptImage(e.target.result);
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+async function processReceiptImage(dataUrl) {
+  const cfg = getConfig();
+  if (!cfg.anthropicKey) {
+    showToast('Set your Anthropic API key in Settings first', true);
+    return;
+  }
+
+  // Show processing
+  document.getElementById('capture-ready').style.display = 'none';
+  document.getElementById('capture-processing').style.display = 'flex';
+  document.getElementById('capture-review').style.display = 'none';
+
+  // Extract base64 data and media type
+  const match = dataUrl.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+  if (!match) { showToast('Invalid image', true); resetCapture(); return; }
+  const mediaType = match[1];
+  const base64Data = match[2];
+
+  // Create thumbnail (smaller version for storage)
+  const thumbnail = await createThumbnail(dataUrl, 400);
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': cfg.anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64Data }
+            },
+            {
+              type: 'text',
+              text: `Extract data from this receipt. Return ONLY valid JSON with this exact structure, no other text:
+{
+  "store": "Store Name",
+  "date": "YYYY-MM-DD",
+  "total": 0.00,
+  "category": "one of: ${EXPENSE_CATEGORIES.join(', ')}",
+  "line_items": [{"item": "Item name", "price": 0.00}]
+}
+If you can't read the date, use today: ${today()}.
+If you can't determine the total, sum the line items.
+Pick the most appropriate category from the list.`
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error('API error: ' + response.status + ' ' + errText);
+    }
+
+    const data = await response.json();
+    const text = data.content[0].text;
+
+    // Parse JSON from response (handle markdown code blocks)
+    let parsed;
+    try {
+      const clean = text.replace(/```json\n?|```\n?/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      throw new Error('Could not parse receipt data: ' + text.substring(0, 200));
+    }
+
+    pendingReview = {
+      ...parsed,
+      thumbnail: thumbnail,
+      total: parseFloat(parsed.total) || 0,
+      line_items: parsed.line_items || [],
+    };
+
+    showReview();
+
+  } catch(e) {
+    console.error('Receipt processing error:', e);
+    showToast('Failed to read receipt: ' + e.message, true);
+    resetCapture();
+  }
+}
+
+function createThumbnail(dataUrl, maxWidth) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(maxWidth / img.width, 1);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.src = dataUrl;
+  });
+}
+
+function showReview() {
+  const r = pendingReview;
+  const color = CAT_COLORS[r.category] || CAT_COLORS['Other'];
+  const icon = CAT_ICONS[r.category] || '📝';
+
+  let html = `
+    <div style="background:var(--surface); border-radius:12px; border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <input id="review-store" value="${r.store}" style="background:none; border:none; font-family:var(--font-sans); font-size:18px; font-weight:700; color:var(--text); outline:none; flex:1; min-width:0;">
+        <span style="font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--red);">${fmt(r.total)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <input id="review-date" type="date" value="${r.date}" style="background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted); outline:none;">
+        <span class="cat-pill" style="background:${color}18; color:${color}; border:1px solid ${color}33;">${icon} ${r.category}</span>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;">
+      <label class="field-label">Category (tap to change)</label>
+      <div id="review-categories" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+        ${EXPENSE_CATEGORIES.map(c => {
+          const cc = CAT_COLORS[c];
+          const sel = c === r.category;
+          return `<button onclick="updateReviewCategory('${c}')" class="cat-chip${sel?' selected':''}" style="${sel ? `background:${cc}30; border-color:${cc}60; color:${cc};` : ''}">${CAT_ICONS[c]} ${c}</button>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  if (r.line_items && r.line_items.length) {
+    html += `
+      <div style="margin-top:8px; background:var(--surface); border-radius:12px; border:1px solid var(--border); padding:12px 16px;">
+        <span class="field-label">Line Items</span>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+          ${r.line_items.map(li => `
+            <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:13px;">
+              <span style="color:var(--text-muted);">${li.item}</span>
+              <span style="color:var(--text);">${fmt(li.price)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if (r.thumbnail) {
+    html += `<img src="${r.thumbnail}" style="width:100%; border-radius:8px; margin-top:8px; border:1px solid var(--border); max-height:200px; object-fit:cover;">`;
+  }
+
+  html += `
+    <div style="display:flex; gap:10px; margin-top:12px;">
+      <button onclick="resetCapture()" class="btn-secondary">Discard</button>
+      <button onclick="confirmReceipt()" class="btn-confirm">✓ Confirm & Log</button>
+    </div>
+  `;
+
+  document.getElementById('capture-review').innerHTML = html;
+  document.getElementById('capture-processing').style.display = 'none';
+  document.getElementById('capture-review').style.display = 'block';
+}
+
+function updateReviewCategory(cat) {
+  if (pendingReview) pendingReview.category = cat;
+  showReview();
+}
+
+async function confirmReceipt() {
+  if (!pendingReview) return;
+  const r = pendingReview;
+  const txn = {
+    id: uuid(),
+    type: 'expense',
+    date: document.getElementById('review-date').value || r.date,
+    amount: r.total,
+    source_or_store: document.getElementById('review-store').value || r.store,
+    category: r.category,
+    notes: '',
+    line_items: r.line_items,
+    thumbnail: r.thumbnail,
+    is_recurring: false,
+    created_at: new Date().toISOString(),
+  };
+  await saveTransaction(txn);
+  showToast('Logged: ' + txn.source_or_store + ' — ' + fmt(txn.amount));
+  pendingReview = null;
+  resetCapture();
+}
+
+function resetCapture() {
+  document.getElementById('capture-ready').style.display = 'flex';
+  document.getElementById('capture-processing').style.display = 'none';
+  document.getElementById('capture-review').style.display = 'none';
+  document.getElementById('camera-container').style.display = 'none';
+  document.getElementById('camera-placeholder').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADD SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function initAddScreen() {
+  document.getElementById('add-date').value = today();
+  setAddType(addType);
+}
+
+function setAddType(type) {
+  addType = type;
+  addCategory = '';
+  const expBtn = document.getElementById('toggle-expense');
+  const incBtn = document.getElementById('toggle-income');
+  if (type === 'expense') {
+    expBtn.style.background = 'var(--red-dim)'; expBtn.style.color = 'var(--red)';
+    incBtn.style.background = 'transparent'; incBtn.style.color = 'var(--text-muted)';
+    document.getElementById('add-source-label').textContent = 'Store / Source';
+    document.getElementById('add-source').placeholder = 'e.g. Walmart';
+    document.getElementById('add-save-btn').textContent = 'Log Expense';
+    document.getElementById('add-save-btn').style.background = 'var(--accent)';
+  } else {
+    incBtn.style.background = 'var(--green-dim)'; incBtn.style.color = 'var(--green)';
+    expBtn.style.background = 'transparent'; expBtn.style.color = 'var(--text-muted)';
+    document.getElementById('add-source-label').textContent = 'Income Source';
+    document.getElementById('add-source').placeholder = 'e.g. Etsy Sales';
+    document.getElementById('add-save-btn').textContent = 'Log Income';
+    document.getElementById('add-save-btn').style.background = 'var(--green)';
+  }
+  renderAddCategories();
+}
+
+function renderAddCategories() {
+  const cats = addType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  document.getElementById('add-categories').innerHTML = cats.map(c => {
+    const cc = CAT_COLORS[c];
+    const sel = c === addCategory;
+    return `<button onclick="selectAddCategory('${c}')" class="cat-chip${sel?' selected':''}" style="${sel ? `background:${cc}30; border-color:${cc}60; color:${cc};` : ''}">${CAT_ICONS[c]} ${c}</button>`;
+  }).join('');
+}
+
+function selectAddCategory(c) {
+  addCategory = c;
+  renderAddCategories();
+}
+
+async function saveManualEntry() {
+  const amount = parseFloat(document.getElementById('add-amount').value);
+  const source = document.getElementById('add-source').value.trim();
+  const date = document.getElementById('add-date').value;
+  const notes = document.getElementById('add-notes').value.trim();
+
+  if (!amount || !source || !addCategory) {
+    showToast('Fill in amount, source, and category', true);
+    return;
+  }
+
+  const txn = {
+    id: uuid(), type: addType, date, amount,
+    source_or_store: source, category: addCategory,
+    notes, line_items: null, thumbnail: null,
+    is_recurring: false, created_at: new Date().toISOString(),
+  };
+
+  await saveTransaction(txn);
+  showToast('Logged: ' + source + ' — ' + fmt(amount));
+
+  // Reset form
+  document.getElementById('add-amount').value = '';
+  document.getElementById('add-source').value = '';
+  document.getElementById('add-notes').value = '';
+  addCategory = '';
+  renderAddCategories();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRANSACTION LIST
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderList() {
+  const listEl = document.getElementById('transaction-list');
+  const emptyEl = document.getElementById('list-empty');
+  const countEl = document.getElementById('list-count');
+
+  if (!transactions.length) {
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    countEl.textContent = '0 entries';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  countEl.textContent = transactions.length + ' entries';
+
+  // Group by month
+  const groups = {};
+  transactions.forEach(t => {
+    const key = t.date.substring(0, 7);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+  const sorted = Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+
+  let html = '';
+  for (const [monthKey, txns] of sorted) {
+    html += `<div style="padding:12px 20px 8px; font-family:var(--font-mono); font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1.5px; position:sticky; top:0; background:var(--bg); z-index:10; border-bottom:1px solid var(--border);">
+      ${fmtMonth(monthKey + '-01')}
+    </div>`;
+
+    for (const t of txns) {
+      const isIncome = t.type === 'income';
+      const isExp = expandedTxn === t.id;
+      const catColor = CAT_COLORS[t.category] || '#94a3b8';
+
+      html += `<div onclick="toggleExpand('${t.id}')" class="txn-row" style="${isExp ? 'background:var(--surface);' : ''}">
+        <span style="font-size:20px; width:28px; text-align:center;">${CAT_ICONS[t.category] || '📝'}</span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.source_or_store}</div>
+          <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-top:2px;">
+            ${fmtDate(t.date)} · <span style="color:${catColor};">${t.category}</span>${t.is_recurring ? ' · 🔄' : ''}
+          </div>
+        </div>
+        <span style="font-family:var(--font-mono); font-size:15px; font-weight:700; color:${isIncome ? 'var(--green)' : 'var(--text)'};">
+          ${isIncome ? '+' : '−'}${fmt(t.amount)}
+        </span>
+      </div>`;
+
+      if (isExp) {
+        html += `<div class="txn-detail">`;
+        if (t.notes) html += `<p style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin:0 0 8px;">${t.notes}</p>`;
+        if (t.line_items && t.line_items.length) {
+          html += t.line_items.map(li => `
+            <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:12px; padding:3px 0;">
+              <span style="color:var(--text-muted);">${li.item}</span>
+              <span style="color:var(--text-dim);">${fmt(li.price)}</span>
+            </div>
+          `).join('');
+        }
+        if (t.thumbnail) {
+          html += `<img src="${t.thumbnail}" style="width:100%; max-height:150px; object-fit:cover; border-radius:6px; margin-top:8px; border:1px solid var(--border);">`;
+        }
+        html += `<div style="display:flex; gap:8px; margin-top:10px;">
+          <button onclick="event.stopPropagation(); deleteTransaction('${t.id}')" style="background:none; border:1px solid var(--red-dim); border-radius:6px; padding:4px 12px; font-family:var(--font-mono); font-size:11px; color:var(--red); cursor:pointer;">Delete</button>
+        </div></div>`;
+      }
+    }
+  }
+
+  listEl.innerHTML = html;
+}
+
+function toggleExpand(id) {
+  expandedTxn = expandedTxn === id ? null : id;
+  renderList();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function setDashView(view) {
+  dashView = view;
+  document.getElementById('dash-monthly-btn').style.background = view === 'monthly' ? 'var(--accent-dim)' : 'transparent';
+  document.getElementById('dash-monthly-btn').style.color = view === 'monthly' ? 'var(--accent)' : 'var(--text-muted)';
+  document.getElementById('dash-yearly-btn').style.background = view === 'yearly' ? 'var(--accent-dim)' : 'transparent';
+  document.getElementById('dash-yearly-btn').style.color = view === 'yearly' ? 'var(--accent)' : 'var(--text-muted)';
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const el = document.getElementById('dashboard-content');
+  if (!transactions.length) {
+    el.innerHTML = '<div style="padding:40px 0; text-align:center; font-family:var(--font-mono); font-size:13px; color:var(--text-dim);">📊 No data yet. Add some transactions to see your dashboard.</div>';
+    return;
+  }
+
+  // Group by month
+  const groups = {};
+  transactions.forEach(t => {
+    const key = t.date.substring(0, 7);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+  const months = Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+
+  if (dashView === 'monthly') {
+    const current = months[0];
+    const txns = current[1];
+    const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const net = income - expenses;
+
+    // Category breakdown
+    const catMap = {};
+    txns.filter(t => t.type === 'expense').forEach(t => {
+      catMap[t.category] = (catMap[t.category] || 0) + t.amount;
+    });
+    const catBreakdown = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+    const maxCat = catBreakdown.length > 0 ? catBreakdown[0][1] : 1;
+
+    el.innerHTML = `
+      <div style="padding:20px; border-radius:12px; background:var(--surface); border:1px solid var(--border);">
+        <div class="field-label" style="margin-bottom:16px;">${fmtMonth(current[0] + '-01')}</div>
+        <div style="display:flex; gap:12px; margin-bottom:16px;">
+          <div style="flex:1;">
+            <div style="font-family:var(--font-mono); font-size:10px; color:var(--green); margin-bottom:4px;">INCOME</div>
+            <div style="font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--green);">${fmt(income)}</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-family:var(--font-mono); font-size:10px; color:var(--red); margin-bottom:4px;">EXPENSES</div>
+            <div style="font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--red);">${fmt(expenses)}</div>
+          </div>
+        </div>
+        <div style="padding:12px 16px; border-radius:8px; background:${net >= 0 ? 'rgba(22,101,52,0.25)' : 'rgba(127,29,29,0.25)'}; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">NET</span>
+          <span style="font-family:var(--font-mono); font-size:18px; font-weight:700; color:${net >= 0 ? 'var(--green)' : 'var(--red)'};">${net >= 0 ? '+' : ''}${fmt(net)}</span>
+        </div>
+      </div>
+
+      ${catBreakdown.length ? `
+        <div style="margin-top:20px;">
+          <div class="field-label" style="margin-bottom:12px;">Spending by Category</div>
+          ${catBreakdown.map(([cat, total]) => {
+            const cc = CAT_COLORS[cat] || '#94a3b8';
+            return `<div style="margin-bottom:10px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted);">${CAT_ICONS[cat] || '📝'} ${cat}</span>
+                <span style="font-family:var(--font-mono); font-size:12px; color:var(--text); font-weight:600;">${fmt(total)}</span>
+              </div>
+              <div style="height:6px; border-radius:3px; background:var(--border); overflow:hidden;">
+                <div style="height:100%; border-radius:3px; width:${(total/maxCat)*100}%; background:${cc}; transition:width 0.4s;"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : ''}
+    `;
+
+  } else {
+    // Yearly view
+    const allMonths = months.map(([key, txns]) => {
+      const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      return { month: key, label: new Date(key+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'}), income, expenses, net: income - expenses };
+    });
+    const yearlyIncome = allMonths.reduce((s, m) => s + m.income, 0);
+    const yearlyExpenses = allMonths.reduce((s, m) => s + m.expenses, 0);
+    const yearlyNet = yearlyIncome - yearlyExpenses;
+
+    el.innerHTML = `
+      <div style="padding:20px; border-radius:12px; background:var(--surface); border:1px solid var(--border);">
+        <div class="field-label" style="margin-bottom:16px;">2026 Year to Date</div>
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+          <div style="flex:1;">
+            <div style="font-family:var(--font-mono); font-size:10px; color:var(--green); margin-bottom:4px;">TOTAL INCOME</div>
+            <div style="font-family:var(--font-mono); font-size:18px; font-weight:700; color:var(--green);">${fmt(yearlyIncome)}</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-family:var(--font-mono); font-size:10px; color:var(--red); margin-bottom:4px;">TOTAL EXPENSES</div>
+            <div style="font-family:var(--font-mono); font-size:18px; font-weight:700; color:var(--red);">${fmt(yearlyExpenses)}</div>
+          </div>
+        </div>
+        <div style="padding:10px 16px; border-radius:8px; background:${yearlyNet >= 0 ? 'rgba(22,101,52,0.25)' : 'rgba(127,29,29,0.25)'}; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">YTD NET</span>
+          <span style="font-family:var(--font-mono); font-size:16px; font-weight:700; color:${yearlyNet >= 0 ? 'var(--green)' : 'var(--red)'};">${yearlyNet >= 0 ? '+' : ''}${fmt(yearlyNet)}</span>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <div class="field-label" style="margin-bottom:12px;">Monthly Breakdown</div>
+        ${allMonths.map(m => {
+          const barMax = Math.max(m.income, m.expenses) || 1;
+          return `<div style="background:var(--surface); border-radius:8px; border:1px solid var(--border); padding:12px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <span style="font-family:var(--font-sans); font-size:14px; font-weight:600;">${m.label}</span>
+              <span style="font-family:var(--font-mono); font-size:13px; font-weight:700; color:${m.net >= 0 ? 'var(--green)' : 'var(--red)'};">${m.net >= 0 ? '+' : ''}${fmt(m.net)}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span style="font-family:var(--font-mono); font-size:10px; color:var(--green); width:14px;">+</span>
+              <div style="flex:1; height:8px; border-radius:4px; background:var(--border); overflow:hidden;">
+                <div style="height:100%; border-radius:4px; width:${(m.income/barMax)*100}%; background:var(--green);"></div>
+              </div>
+              <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-dim); min-width:70px; text-align:right;">${fmt(m.income)}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-family:var(--font-mono); font-size:10px; color:var(--red); width:14px;">−</span>
+              <div style="flex:1; height:8px; border-radius:4px; background:var(--border); overflow:hidden;">
+                <div style="height:100%; border-radius:4px; width:${(m.expenses/barMax)*100}%; background:var(--red);"></div>
+              </div>
+              <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-dim); min-width:70px; text-align:right;">${fmt(m.expenses)}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function loadSettings() {
+  const cfg = getConfig();
+  document.getElementById('cfg-anthropic-key').value = cfg.anthropicKey;
+  document.getElementById('cfg-supabase-url').value = cfg.supabaseUrl;
+  document.getElementById('cfg-supabase-key').value = cfg.supabaseKey;
+}
+
+function saveSettings() {
+  localStorage.setItem('rt_anthropic_key', document.getElementById('cfg-anthropic-key').value.trim());
+  localStorage.setItem('rt_supabase_url', document.getElementById('cfg-supabase-url').value.trim());
+  localStorage.setItem('rt_supabase_key', document.getElementById('cfg-supabase-key').value.trim());
+  showToast('Settings saved');
+  // Try loading from Supabase now
+  loadTransactions();
+}
+
+function toggleShowKeys(show) {
+  const type = show ? 'text' : 'password';
+  document.getElementById('cfg-anthropic-key').type = type;
+  document.getElementById('cfg-supabase-key').type = type;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportData() {
+  if (!transactions.length) { showToast('No data to export', true); return; }
+  const headers = ['date','type','amount','source_or_store','category','notes','is_recurring'];
+  const rows = transactions.map(t => headers.map(h => {
+    let val = t[h] || '';
+    if (typeof val === 'string' && val.includes(',')) val = '"' + val + '"';
+    return val;
+  }).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'transactions_' + today() + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exported ' + transactions.length + ' transactions');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', async () => {
+  loadSettings();
+  loadRules();
+  await loadTransactions();
+  initAddScreen();
+  checkRecurring();
+});
+</script>
+</body>
+</html>
