@@ -561,7 +561,7 @@ function saveRule() {
   const day = parseInt(document.getElementById('rule-day').value);
   const category = document.getElementById('rule-category').value;
   if (!label || !amount) { showToast('Fill in label and amount', true); return; }
-  recurringRules.push({ id: uuid(), label, amount, frequency, day, category, active: true, created_at: new Date().toISOString() });
+  recurringRules.push({ id: uuid(), label, amount, frequency, day, category, active: true, start_date: today(), created_at: new Date().toISOString() });
   saveRulesToStorage();
   hideRuleForm();
   showToast('Rule added: ' + label);
@@ -607,12 +607,14 @@ async function checkRecurring(manual = false) {
   for (const rule of recurringRules) {
     if (!rule.active) continue;
 
-    // Only look back from today, never forward
+    // Only look back from today, never before the rule's start date
     const lookback = rule.frequency === 'monthly' ? 35 : 14;
+    const ruleStart = rule.start_date ? new Date(rule.start_date + 'T00:00:00') : new Date(rule.created_at);
     for (let i = 0; i < lookback; i++) {
       const checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      // Don't create entries for future dates
+      // Don't create entries for future dates or before rule was created
       if (checkDate > now) continue;
+      if (checkDate < ruleStart) continue;
 
       const year = checkDate.getFullYear();
       const month = String(checkDate.getMonth() + 1).padStart(2, '0');
